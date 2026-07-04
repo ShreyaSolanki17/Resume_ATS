@@ -1,0 +1,36 @@
+# Environment variables
+.env
+.env.*.local
+.env.local
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+
+# Frontend
+node_modules/
+.next/
+npm-debug.log*
+yarn-error.log*
+
+# Testing and coverage
+.pytest_cache/
+htmlcov/
+.coverage
+
+# IDE / Editor specific
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
