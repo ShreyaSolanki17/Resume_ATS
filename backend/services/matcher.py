@@ -42,8 +42,19 @@ def match_resume(resume: dict, jd_analysis: dict) -> dict:
     resume_text = resume.get("raw_text", "")
     resume_skills = _collect_resume_skills(resume)
 
-    required = jd_analysis.get("required_skills", [])
-    nice = jd_analysis.get("nice_to_have_skills", [])
+    # Aggregate all required and preferred items from the granular JD analysis
+    required = (
+        jd_analysis.get("required_skills", [])
+        + jd_analysis.get("required_concepts", [])
+        + jd_analysis.get("required_workflows", [])
+        + jd_analysis.get("required_tools", [])
+    )
+    nice = (
+        jd_analysis.get("preferred_skills", [])
+        + jd_analysis.get("preferred_concepts", [])
+        + jd_analysis.get("preferred_workflows", [])
+        + jd_analysis.get("preferred_tools", [])
+    )
     keywords = jd_analysis.get("keywords", [])
 
     matched_required = [s for s in required if _skill_match(resume_text, resume_skills, s)]

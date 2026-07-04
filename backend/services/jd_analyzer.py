@@ -1,38 +1,48 @@
 import json
 import os
 import re
+import pathlib
 
 
 JD_SCHEMA = {
     "required_skills": [],
-    "nice_to_have_skills": [],
-    "years_experience": "",
+    "preferred_skills": [],
+    "required_concepts": [],
+    "preferred_concepts": [],
+    "required_workflows": [],
+    "preferred_workflows": [],
+    "required_tools": [],
+    "preferred_tools": [],
+    "experience_level": "",
     "keywords": [],
 }
 
+PROMPT_DIR = pathlib.Path(__file__).parent.parent / "prompts"
+
 
 def analyze_jd(jd_text: str) -> dict:
-    provider = os.getenv("LLM_PROVIDER", "groq").lower()
     prompt = _build_prompt(jd_text)
 
-    if provider == "gemini" and os.getenv("GEMINI_API_KEY"):
-        return _call_gemini(prompt)
+    # 1. Try Groq first if API key is available
     if os.getenv("GROQ_API_KEY") and os.getenv("GROQ_API_KEY") != "your-groq-api-key-here":
-        return _call_groq(prompt)
+        try:
+            return _call_groq(prompt)
+        except Exception:  # Broadly catch API, network, or parsing errors
+            pass  # Fall through to the next provider
+
+    # 2. Fallback to Gemini if Groq fails or is not configured
+    if os.getenv("GEMINI_API_KEY") and os.getenv("GEMINI_API_KEY") != "your-gemini-api-key-here":
+        try:
+            return _call_gemini(prompt)
+        except Exception:
+            pass  # Fall through to heuristics
+
+    # 3. Final fallback to local heuristics if all LLMs fail
     return _heuristic_extract(jd_text)
 
-
 def _build_prompt(jd_text: str) -> str:
-    return f"""Extract job requirements from this job description.
-Return ONLY valid JSON with these fields:
-- required_skills: list of must-have technical skills
-- nice_to_have_skills: list of preferred but optional skills
-- years_experience: string like "3-5 years" or ""
-- keywords: list of important domain terms and tools mentioned
-
-Job description:
-{jd_text}
-"""
+    prompt_template = (PROMPT_DIR / "jd_analyzer_prompt.txt").read_text()
+    return prompt_template.format(jd_text=jd_text)
 
 
 def _call_groq(prompt: str) -> dict:
@@ -67,16 +77,20 @@ def _call_gemini(prompt: str) -> dict:
 
 
 def _parse_json_response(text: str) -> dict:
-    try:
-        data = json.loads(text)
-        return {
-            "required_skills": _as_str_list(data.get("required_skills")),
-            "nice_to_have_skills": _as_str_list(data.get("nice_to_have_skills")),
-            "years_experience": str(data.get("years_experience", "") or ""),
-            "keywords": _as_str_list(data.get("keywords")),
-        }
-    except json.JSONDecodeError:
-        return _heuristic_extract(text)
+    # This function can raise json.JSONDecodeError, which the caller must handle.
+    data = json.loads(text)
+    return {
+        "required_skills": _as_str_list(data.get("required_skills")),
+        "preferred_skills": _as_str_list(data.get("preferred_skills")),
+        "required_concepts": _as_str_list(data.get("required_concepts")),
+        "preferred_concepts": _as_str_list(data.get("preferred_concepts")),
+        "required_workflows": _as_str_list(data.get("required_workflows")),
+        "preferred_workflows": _as_str_list(data.get("preferred_workflows")),
+        "required_tools": _as_str_list(data.get("required_tools")),
+        "preferred_tools": _as_str_list(data.get("preferred_tools")),
+        "experience_level": str(data.get("experience_level", "") or ""),
+        "keywords": _as_str_list(data.get("keywords")),
+    }
 
 
 def _as_str_list(value) -> list[str]:
@@ -118,17 +132,25 @@ def _heuristic_extract(jd_text: str) -> dict:
             if skill not in bucket:
                 bucket.append(skill)
 
-    years = ""
-    years_match = re.search(r"(\d+\+?\s*(?:-\s*\d+)?\s*years?)", jd_text, re.I)
-    if years_match:
-        years = years_match.group(1)
+    experience = ""
+    exp_match = re.search(
+        r"(\d+\+?\s*(?:-\s*\d+)?\s*years?|senior|lead|junior|entry-level)", jd_text, re.I
+    )
+    if exp_match:
+        experience = exp_match.group(1)
 
     if not required:
         required = list(dict.fromkeys(skill_pattern.findall(jd_text)))[:8]
 
     return {
         "required_skills": required,
-        "nice_to_have_skills": nice,
-        "years_experience": years,
+        "preferred_skills": nice,
+        "required_concepts": [],
+        "preferred_concepts": [],
+        "required_workflows": [],
+        "preferred_workflows": [],
+        "required_tools": [],
+        "preferred_tools": [],
+        "experience_level": experience,
         "keywords": list(dict.fromkeys(keywords))[:12],
     }

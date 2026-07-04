@@ -1,0 +1,270 @@
+JD_ANALYZER_PROMPT = """
+You are an expert HR analyst and technical recruiter. Your task is to analyze the job description below and extract the requirements into a structured JSON format for an ATS matching system.
+
+Your goal is to produce a **clean, accurate, and conservative extraction** of technical requirements from the JD while **correctly separating REQUIRED vs PREFERRED items**.
+
+--------------------------------------------------
+CLASSIFICATION PRIORITY RULES
+--------------------------------------------------
+
+Use the following priority order when deciding whether something is REQUIRED or PREFERRED:
+
+1. **Section heading has the highest priority**
+   - If an item appears under headings such as:
+     - "Required Qualifications"
+     - "Requirements"
+     - "Basic Qualifications"
+     - "Must Have"
+     - "Minimum Qualifications"
+     then classify it as **required** unless the text explicitly marks it as optional.
+
+   - If an item appears under headings such as:
+     - "Preferred Qualifications"
+     - "Nice to Have"
+     - "Good to Have"
+     - "Bonus"
+     - "Preferred"
+     - "Plus"
+     then classify it as **preferred** unless the text explicitly marks it as required.
+
+2. **Key Responsibilities / Day-to-day responsibilities**
+   - Treat concrete engineering tasks in responsibilities as **required expectations** if they describe actual work the candidate is expected to do.
+   - Examples:
+     - write unit tests
+     - build REST APIs
+     - debug issues
+     - participate in code reviews
+     - document APIs
+     - implement authentication
+     - maintain backend systems
+   - These should usually go into `required_concepts`, `required_workflows`, or `required_skills/tools` depending on the item.
+
+3. **Explicit wording inside sentences**
+   - Required indicators:
+     - "must have"
+     - "required"
+     - "essential"
+     - "need to have"
+     - "strong knowledge of"
+     - "proficiency in"
+     - "experience with"
+     - "familiarity with" (if it appears in a required section)
+   - Preferred indicators:
+     - "nice to have"
+     - "preferred"
+     - "bonus"
+     - "plus"
+     - "good to have"
+     - "exposure to"
+
+4. **Do NOT promote preferred items to required just because they sound important**
+   - If a tool or technology is listed under Preferred Qualifications, keep it preferred.
+   - Example: if AWS, Azure, GCP, Redis, Docker, MongoDB, Linux, CI/CD appear in Preferred Qualifications, they must stay in preferred categories unless the JD explicitly also lists them as required elsewhere.
+
+--------------------------------------------------
+GENERAL CATEGORY VS EXAMPLES RULE
+--------------------------------------------------
+
+If the JD mentions a general category plus examples, apply these rules carefully:
+
+1. If the phrase appears in a **preferred section**, classify BOTH the general category and the examples as preferred.
+   Example:
+   "Exposure to Docker, containers, or cloud platforms such as AWS, Azure, or GCP"
+   - Docker → preferred
+   - cloud platforms → preferred concept/keyword
+   - AWS / Azure / GCP → preferred
+
+2. If the phrase appears in a **required section**, classify the **general capability** as required.
+   - Example:
+     "Experience with relational databases such as MySQL or PostgreSQL"
+     - relational databases / SQL database knowledge → required
+     - MySQL / PostgreSQL → required if they are clearly named as examples of the required stack
+   - Example:
+     "Familiarity with backend development concepts such as APIs, JSON, authentication, CRUD"
+     - APIs, JSON, authentication, CRUD → required concepts
+
+3. Only mark a specific example as required if the JD clearly treats it as part of the required stack or places it inside a required section.
+
+--------------------------------------------------
+WHAT TO EXTRACT
+--------------------------------------------------
+
+Extract only **technical and role-relevant ATS items**. Ignore generic corporate language unless it maps to a concrete engineering requirement.
+
+You MUST classify items into these buckets:
+
+### 1) skills
+Specific technical skills, languages, frameworks, libraries, APIs, databases, or technologies that a candidate can directly list on a resume.
+Examples:
+- Python
+- JavaScript
+- SQL
+- FastAPI
+- Django
+- Flask
+- React
+- PostgreSQL
+- MySQL
+- MongoDB
+- REST APIs
+
+### 2) concepts
+Technical knowledge areas, engineering fundamentals, or problem-solving domains.
+Examples:
+- object-oriented programming
+- data structures and algorithms
+- authentication
+- authorization
+- debugging
+- testing
+- CRUD
+- request/response flow
+- DBMS
+- system design
+- scalability
+- distributed systems
+- secure coding
+
+### 3) workflows
+Engineering practices, collaboration processes, or software development workflows.
+Examples:
+- CI/CD
+- code reviews
+- pull requests
+- deployment workflows
+- API documentation
+- test coverage
+- monitoring and maintenance
+- Agile
+- Scrum
+
+### 4) tools
+Developer tools, infrastructure tools, platforms, or cloud services.
+Examples:
+- Git
+- GitHub
+- Docker
+- Postman
+- Linux
+- AWS
+- Azure
+- GCP
+- Redis
+- Jira
+
+--------------------------------------------------
+NORMALIZATION RULES
+--------------------------------------------------
+
+Normalize items into short, resume-friendly labels.
+
+Examples:
+- "RESTful APIs" → "REST APIs"
+- "Git/GitHub" → "Git", "GitHub"
+- "object oriented programming" → "OOP"
+- "data structures and algorithms" → "DSA"
+- "unit tests and integration tests" → "Unit Testing", "Integration Testing"
+- "request/response flow" → "HTTP Request/Response"
+- "continuous integration and continuous deployment" → "CI/CD"
+
+Use title case / canonical names where appropriate:
+- PostgreSQL
+- MongoDB
+- FastAPI
+- GitHub
+- JavaScript
+
+Avoid duplicates across the same category.
+
+--------------------------------------------------
+SPECIAL EXTRACTION RULES
+--------------------------------------------------
+
+1. **Testing**
+If the JD mentions:
+- unit tests
+- integration tests
+- test coverage
+- software testing practices
+
+extract them as concepts/workflows, not generic keywords.
+
+2. **Debugging / troubleshooting**
+If explicitly mentioned, extract as required_concepts.
+
+3. **Code reviews / pull requests**
+If explicitly mentioned, extract as required_workflows.
+
+4. **Documentation**
+If the JD mentions documenting APIs, workflows, or technical decisions, extract as required_workflows.
+
+5. **Authentication / authorization**
+Extract as concepts if mentioned.
+
+6. **Databases**
+If the JD requires SQL and relational databases such as MySQL/PostgreSQL:
+- SQL → required_skills
+- MySQL / PostgreSQL → required_skills
+- DBMS / schema design / query optimization → required_concepts
+
+7. **Soft skills**
+Do NOT extract generic soft skills like:
+- motivated
+- ownership mindset
+- attention to detail
+- communication
+unless they map directly to a concrete workflow or engineering practice.
+You may optionally include a few important ones in `keywords`, but do not put them in required_skills/tools/concepts/workflows.
+
+--------------------------------------------------
+OUTPUT REQUIREMENTS
+--------------------------------------------------
+
+Return ONLY a valid JSON object.
+Do not add explanations, markdown, or extra text.
+
+The JSON object MUST contain ALL of the following fields:
+
+{
+  "required_skills": [],
+  "preferred_skills": [],
+  "required_concepts": [],
+  "preferred_concepts": [],
+  "required_workflows": [],
+  "preferred_workflows": [],
+  "required_tools": [],
+  "preferred_tools": [],
+  "experience_level": "",
+  "keywords": []
+}
+
+--------------------------------------------------
+FIELD DEFINITIONS
+--------------------------------------------------
+
+- required_skills: required programming languages, frameworks, databases, APIs, libraries, or technical technologies
+- preferred_skills: preferred programming languages, frameworks, databases, APIs, libraries, or technical technologies
+- required_concepts: required technical concepts, knowledge areas, engineering fundamentals
+- preferred_concepts: preferred technical concepts, knowledge areas, engineering fundamentals
+- required_workflows: required engineering workflows, collaboration practices, testing/deployment/documentation practices
+- preferred_workflows: preferred engineering workflows, collaboration practices, testing/deployment/documentation practices
+- required_tools: required tools/platforms/cloud/infrastructure/dev tools
+- preferred_tools: preferred tools/platforms/cloud/infrastructure/dev tools
+- experience_level: exact experience requirement if explicitly stated, otherwise ""
+- keywords: important ATS/domain terms that do not fit cleanly elsewhere
+
+--------------------------------------------------
+FINAL INSTRUCTIONS
+--------------------------------------------------
+
+- Be conservative and accurate.
+- Prefer section-based classification over inference.
+- Do not move items from Preferred Qualifications into required buckets unless the JD explicitly requires them elsewhere.
+- If uncertain whether something is required or preferred, use the section heading and wording as the deciding factor.
+- Return ONLY the JSON object.
+
+--------------------------------------------------
+JOB DESCRIPTION
+--------------------------------------------------
+{jd_text}
+"""

@@ -1,6 +1,9 @@
 import json
 import os
+import pathlib
 
+
+PROMPT_DIR = pathlib.Path(__file__).parent.parent / "prompts"
 
 def generate_suggestions(resume: dict, jd_analysis: dict, match_result: dict) -> list[str]:
     provider = os.getenv("LLM_PROVIDER", "groq").lower()
@@ -14,21 +17,14 @@ def generate_suggestions(resume: dict, jd_analysis: dict, match_result: dict) ->
 
 
 def _build_prompt(resume: dict, jd_analysis: dict, match_result: dict) -> str:
-    return f"""You are an ATS resume coach. Given a resume, job description analysis, and match gaps,
-return ONLY valid JSON: {{"suggestions": ["...", "..."]}}
-
-Give 3-6 specific, actionable suggestions. Mention missing skills by name when relevant.
-Quantify improvements where possible.
-
-JD analysis:
-{json.dumps(jd_analysis, indent=2)}
-
-Match result:
-{json.dumps({k: v for k, v in match_result.items() if k != "suggestions"}, indent=2)}
-
-Resume excerpt (first 3000 chars):
-{resume.get("raw_text", "")[:3000]}
-"""
+    prompt_template = (PROMPT_DIR / "suggestions_prompt.txt").read_text()
+    return prompt_template.format(
+        jd_analysis=json.dumps(jd_analysis, indent=2),
+        match_result=json.dumps(
+            {k: v for k, v in match_result.items() if k != "suggestions"}, indent=2
+        ),
+        resume_excerpt=resume.get("raw_text", "")[:3000],
+    )
 
 
 def _call_groq(prompt: str) -> list[str]:
